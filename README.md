@@ -160,4 +160,4 @@ WechatCleaner/
 
 ## License
 
-如果你准备开源到 GitHub，建议在仓库中补充一个明确的开源许可证，例如 MIT License。
+本项目基于 [MIT License](LICENSE) 开源。
