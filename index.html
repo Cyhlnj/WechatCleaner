@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>微信资源清理器</title>
+  <link rel="stylesheet" href="styles.css?v=20260626-4" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">本地静态工具</p>
+      <h1>微信资源清理器</h1>
+      <p class="subtitle">选择微信聊天资源文件夹，直观预览图片/视频/文件，勾选并清理无用资源。</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="notice" id="supportNotice">
+      <strong>使用说明：</strong>
+      在 Chrome / Edge 中点击“选择文件夹”，手动选中微信资源目录，例如：
+      <code>~/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/&lt;你的微信数据目录&gt;/msg/video</code>。
+      纯前端页面不能自动读取这个绝对路径，必须由你授权选择。
+    </section>
+
+    <section class="panel controls">
+      <div class="control-row">
+        <label class="control-field">
+          <span class="control-label">类型</span>
+          <select id="typeFilter">
+            <option value="all">全部</option>
+            <option value="image">图片</option>
+            <option value="video">视频</option>
+            <option value="file">文件</option>
+          </select>
+        </label>
+        <label class="control-field">
+          <span class="control-label">最小大小</span>
+          <select id="minSizeFilter">
+            <option value="0">不限</option>
+            <option value="1048576">≥ 1 MB</option>
+            <option value="5242880">≥ 5 MB</option>
+            <option value="10485760">≥ 10 MB</option>
+            <option value="52428800">≥ 50 MB</option>
+            <option value="104857600">≥ 100 MB</option>
+          </select>
+        </label>
+        <label class="control-field">
+          <span class="control-label">排序</span>
+          <select id="sortSelect">
+            <option value="size-desc">大小：从大到小</option>
+            <option value="size-asc">大小：从小到大</option>
+            <option value="mtime-desc">时间：从新到旧</option>
+            <option value="mtime-asc">时间：从旧到新</option>
+            <option value="name-asc">名称：A-Z</option>
+            <option value="name-desc">名称：Z-A</option>
+          </select>
+        </label>
+        <label class="control-field">
+          <span class="control-label">查重方式</span>
+          <select id="duplicateModeSelect">
+            <option value="fast">快速疑似</option>
+            <option value="hash">精确 Hash</option>
+          </select>
+        </label>
+        <label class="control-field toggle-field">
+          <span class="control-label">显示</span>
+          <span class="toggle-box">
+            <input id="selectedOnly" type="checkbox" />
+            <span>只看已选</span>
+          </span>
+        </label>
+        <label class="control-field toggle-field confirm-toggle">
+          <span class="control-label">删除确认</span>
+          <span class="toggle-box">
+            <input id="requireConfirm" type="checkbox" checked />
+            <span>删除前二次确认</span>
+          </span>
+        </label>
+        <label class="control-field theme-field">
+          <span class="control-label">主题</span>
+          <select id="themeSelect">
+            <option value="auto">跟随系统</option>
+            <option value="light">浅色</option>
+            <option value="dark">深色</option>
+          </select>
+        </label>
+        <div class="control-field folder-field">
+          <span class="control-label">文件夹</span>
+          <div class="button-group">
+            <button id="pickDirBtn" class="primary">选择文件夹</button>
+            <button id="restoreLastBtn" hidden>恢复上次文件夹</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button id="rescanBtn" disabled>重新扫描</button>
+        <button id="findDuplicatesBtn" disabled>查找疑似重复文件</button>
+        <button id="selectDuplicateExtrasBtn" disabled>每组保留最新，选中其余</button>
+        <button id="exitDuplicateModeBtn" hidden>退出重复模式</button>
+        <button id="selectPageBtn" disabled>选择当前页</button>
+        <button id="clearSelectionBtn" disabled>清空选择</button>
+        <button id="exportBtn" disabled>导出清理清单</button>
+        <button id="deleteBtn" class="danger" disabled>删除选中文件</button>
+      </div>
+    </section>
+
+    <section class="stats-grid" aria-live="polite">
+      <div class="stat"><span>当前目录</span><strong id="rootName">未选择</strong></div>
+      <div class="stat"><span>资源文件</span><strong id="totalCount">0</strong></div>
+      <div class="stat"><span>总大小</span><strong id="totalSize">0 B</strong></div>
+      <div class="stat"><span>已选</span><strong id="selectedCount">0 / 0 B</strong></div>
+    </section>
+
+    <section class="panel progress-panel" id="progressPanel" hidden>
+      <div class="progress-title">
+        <span id="progressText">准备扫描...</span>
+        <span class="progress-right">
+          <span id="progressCount">0</span>
+          <button id="stopProgressBtn" type="button">停止</button>
+        </span>
+      </div>
+      <div class="progress-bar"><div id="progressFill"></div></div>
+    </section>
+
+    <section class="panel toolbar">
+      <div id="resultInfo">还没有扫描结果。</div>
+      <div class="pager">
+        <button id="prevPageBtn" disabled>上一页</button>
+        <span id="pageInfo">第 0 / 0 页</span>
+        <button id="nextPageBtn" disabled>下一页</button>
+      </div>
+    </section>
+
+    <section id="grid" class="media-grid" aria-live="polite"></section>
+  </main>
+
+  <dialog id="previewDialog" class="preview-dialog">
+    <button id="closePreviewBtn" class="close-btn" aria-label="关闭预览">×</button>
+    <div id="previewBody" class="preview-body"></div>
+    <div class="preview-info-row">
+      <div id="previewMeta" class="preview-meta"></div>
+      <div class="preview-actions">
+        <button id="copyDirBtn" type="button">复制完整路径</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="deleteDialog" class="delete-dialog">
+    <h2>确认删除选中文件？</h2>
+    <p>这个静态页面只能调用浏览器的文件系统删除能力，不能移动到 macOS 废纸篓。删除后可能不可恢复。</p>
+    <p>将删除 <strong id="deleteCountText">0</strong> 个文件，共 <strong id="deleteSizeText">0 B</strong>。</p>
+    <menu>
+      <button id="cancelDeleteBtn">取消</button>
+      <button id="confirmDeleteBtn" class="danger">确认删除</button>
+    </menu>
+  </dialog>
+
+  <script src="app.js?v=20260626-4"></script>
+</body>
+</html>
