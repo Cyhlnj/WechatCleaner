@@ -1,6 +1,6 @@
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'tif', 'tiff', 'avif']);
 const VIDEO_EXTS = new Set(['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm', '3gp', 'flv', 'wmv']);
-const PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 200;
 const DB_NAME = 'wechat-cleaner';
 const DB_VERSION = 1;
 const STORE_NAME = 'settings';
@@ -40,6 +40,11 @@ const els = {
   minSizeFilter: $('minSizeFilter'),
   sortSelect: $('sortSelect'),
   duplicateModeSelect: $('duplicateModeSelect'),
+  excludeExtInput: $('excludeExtInput'),
+  excludeNameRegexInput: $('excludeNameRegexInput'),
+  excludeNumberNameBtn: $('excludeNumberNameBtn'),
+  excludeNameHint: $('excludeNameHint'),
+  pageSizeSelect: $('pageSizeSelect'),
   selectedOnly: $('selectedOnly'),
   requireConfirm: $('requireConfirm'),
   themeSelect: $('themeSelect'),
@@ -99,6 +104,75 @@ function typeLabel(type) {
 function fileIconLabel(item) {
   const ext = getExt(item.name);
   return ext ? ext.slice(0, 5).toUpperCase() : 'FILE';
+}
+
+function excludedExtSet() {
+  return new Set(
+    els.excludeExtInput.value
+      .split(/[\s,，;；|]+/)
+      .map((item) => item.trim().toLowerCase().replace(/^\./, ''))
+      .filter(Boolean)
+  );
+}
+
+function isExcludedFile(item, excluded = excludedExtSet()) {
+  const ext = getExt(item.name);
+  return ext ? excluded.has(ext) : excluded.has('无扩展名') || excluded.has('none');
+}
+
+function splitNameRegexRules(value) {
+  return value
+    .split(/[\n,，;；]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseNameRegexRule(rule) {
+  const slashMatch = rule.match(/^\/(.+)\/([a-z]*)$/i);
+  if (slashMatch) {
+    return new RegExp(slashMatch[1], slashMatch[2]);
+  }
+  return new RegExp(rule);
+}
+
+function excludeNameRegexList() {
+  const rules = splitNameRegexRules(els.excludeNameRegexInput.value);
+  const regexes = [];
+  const errors = [];
+
+  for (const rule of rules) {
+    try {
+      regexes.push(parseNameRegexRule(rule));
+    } catch (error) {
+      errors.push(rule);
+    }
+  }
+
+  updateExcludeNameHint(rules.length, errors);
+  return regexes;
+}
+
+function updateExcludeNameHint(ruleCount = splitNameRegexRules(els.excludeNameRegexInput.value).length, errors = []) {
+  if (!els.excludeNameHint) return;
+
+  if (!ruleCount) {
+    els.excludeNameHint.textContent = '';
+    els.excludeNameHint.classList.remove('error');
+    return;
+  }
+
+  if (errors.length) {
+    els.excludeNameHint.textContent = `正则错误：${errors.slice(0, 2).join('，')}`;
+    els.excludeNameHint.classList.add('error');
+    return;
+  }
+
+  els.excludeNameHint.textContent = `${ruleCount} 条规则`;
+  els.excludeNameHint.classList.remove('error');
+}
+
+function isExcludedByName(item, regexList = excludeNameRegexList()) {
+  return regexList.some((regex) => regex.test(item.name));
 }
 
 function formatSize(bytes) {
@@ -223,6 +297,15 @@ function loadControlPreferences() {
   if (optionExists(els.duplicateModeSelect, prefs.duplicateModeSelect)) {
     els.duplicateModeSelect.value = prefs.duplicateModeSelect;
   }
+  if (typeof prefs.excludeExtInput === 'string') {
+    els.excludeExtInput.value = prefs.excludeExtInput;
+  }
+  if (typeof prefs.excludeNameRegexInput === 'string') {
+    els.excludeNameRegexInput.value = prefs.excludeNameRegexInput;
+  }
+  if (optionExists(els.pageSizeSelect, prefs.pageSizeSelect)) {
+    els.pageSizeSelect.value = prefs.pageSizeSelect;
+  }
   if (typeof prefs.selectedOnly === 'boolean') {
     els.selectedOnly.checked = prefs.selectedOnly;
   }
@@ -237,6 +320,9 @@ function saveControlPreferences() {
     minSizeFilter: els.minSizeFilter.value,
     sortSelect: els.sortSelect.value,
     duplicateModeSelect: els.duplicateModeSelect.value,
+    excludeExtInput: els.excludeExtInput.value,
+    excludeNameRegexInput: els.excludeNameRegexInput.value,
+    pageSizeSelect: els.pageSizeSelect.value,
     selectedOnly: els.selectedOnly.checked,
     requireConfirm: els.requireConfirm.checked,
   }));
@@ -385,6 +471,11 @@ function requestStopCurrentTask() {
   state.stopRequested = true;
   els.stopProgressBtn.disabled = true;
   updateProgress('正在停止，请稍候...', els.progressCount.textContent);
+}
+
+function currentPageSize() {
+  const value = Number(els.pageSizeSelect.value || DEFAULT_PAGE_SIZE);
+  return [100, 200, 500, 1000].includes(value) ? value : DEFAULT_PAGE_SIZE;
 }
 
 function clearRenderUrls() {
@@ -606,7 +697,9 @@ async function hashDuplicateSignature(item) {
 async function findSuspectedDuplicateFiles() {
   if (state.isFindingDuplicates) return;
 
-  const files = state.files.slice();
+  const excluded = excludedExtSet();
+  const excludedNameList = excludeNameRegexList();
+  const files = state.files.filter((item) => !isExcludedFile(item, excluded) && !isExcludedByName(item, excludedNameList));
   if (files.length < 2) {
     alert('当前目录里文件少于 2 个，无法查找疑似重复文件。');
     return;
@@ -750,10 +843,23 @@ async function loadDirectory(rootHandle, { fromRemembered = false } = {}) {
   }
 
   if (fromRemembered) {
-    els.supportNotice.innerHTML = `<strong>已自动恢复上次文件夹：</strong>${escapeHtml(rootHandle.name)}。如果要换目录，点击“选择文件夹”。`;
+    els.supportNotice.innerHTML = `<strong>已恢复上次文件夹：</strong>${escapeHtml(rootHandle.name)}。如果要换目录，点击“选择文件夹”。`;
   } else {
-    els.supportNotice.innerHTML = `<strong>已记住当前文件夹：</strong>${escapeHtml(rootHandle.name)}。下次打开会自动尝试恢复并扫描。`;
+    els.supportNotice.innerHTML = `<strong>已记住当前文件夹：</strong>${escapeHtml(rootHandle.name)}。下次打开只显示恢复按钮，不会自动扫描。`;
   }
+}
+
+async function showRememberedDirectoryShortcut() {
+  if (!window.showDirectoryPicker) return false;
+
+  const remembered = await getRememberedDirectory();
+  if (!remembered?.handle) return false;
+
+  const name = remembered.name || remembered.handle.name || '上次文件夹';
+  els.restoreLastBtn.hidden = false;
+  els.restoreLastBtn.textContent = `恢复上次文件夹：${name}`;
+  els.supportNotice.innerHTML = `<strong>已记住上次文件夹：</strong>${escapeHtml(name)}。刷新不会自动扫描；点击“恢复上次文件夹”后才会开始扫描。`;
+  return true;
 }
 
 async function restoreRememberedDirectory({ requestPermission = false } = {}) {
@@ -817,8 +923,12 @@ function applyFilters() {
   const type = els.typeFilter.value;
   const minSize = Number(els.minSizeFilter.value || 0);
   const selectedOnly = els.selectedOnly.checked;
+  const excluded = excludedExtSet();
+  const excludedNameList = excludeNameRegexList();
 
   let list = state.files.filter((item) => {
+    if (isExcludedFile(item, excluded)) return false;
+    if (isExcludedByName(item, excludedNameList)) return false;
     if (state.duplicateMode) {
       if (!state.duplicateIds.has(item.id)) return false;
     } else if (type !== 'all' && item.type !== type) {
@@ -847,22 +957,25 @@ function applyFilters() {
   });
 
   state.filtered = list;
-  const pageCount = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const pageSize = currentPageSize();
+  const pageCount = Math.max(1, Math.ceil(list.length / pageSize));
   if (state.page > pageCount) state.page = pageCount;
   if (state.page < 1) state.page = 1;
   render();
 }
 
 function currentPageItems() {
-  const start = (state.page - 1) * PAGE_SIZE;
-  return state.filtered.slice(start, start + PAGE_SIZE);
+  const pageSize = currentPageSize();
+  const start = (state.page - 1) * pageSize;
+  return state.filtered.slice(start, start + pageSize);
 }
 
 async function render() {
   clearRenderUrls();
   updateStats();
 
-  const pageCount = state.filtered.length === 0 ? 0 : Math.ceil(state.filtered.length / PAGE_SIZE);
+  const pageSize = currentPageSize();
+  const pageCount = state.filtered.length === 0 ? 0 : Math.ceil(state.filtered.length / pageSize);
   const pageItems = currentPageItems();
   if (!state.files.length) {
     els.resultInfo.textContent = '还没有扫描结果。';
@@ -1183,7 +1296,8 @@ async function deleteItems(items, { closeDialog = false, keepSlots = false, card
   if (keepSlots) {
     keepDeletedSlotsBlank(deleted, cards);
     updateStats();
-    const pageCount = state.filtered.length === 0 ? 0 : Math.ceil(state.filtered.length / PAGE_SIZE);
+    const pageSize = currentPageSize();
+    const pageCount = state.filtered.length === 0 ? 0 : Math.ceil(state.filtered.length / pageSize);
     els.pageInfo.textContent = `第 ${pageCount ? state.page : 0} / ${pageCount} 页`;
     els.resultInfo.textContent = `已删除 ${deleted.length} 个文件；当前位置已留空，翻页后重新渲染。`;
   } else {
@@ -1201,6 +1315,13 @@ function bindEvents() {
   els.pickDirBtn.addEventListener('click', pickDirectory);
   els.restoreLastBtn.addEventListener('click', () => restoreRememberedDirectory({ requestPermission: true }));
   els.stopProgressBtn.addEventListener('click', requestStopCurrentTask);
+  els.excludeNumberNameBtn.addEventListener('click', () => {
+    els.excludeNameRegexInput.value = '^\\d+(_M)?$';
+    updateExcludeNameHint();
+    saveControlPreferences();
+    state.page = 1;
+    applyFilters();
+  });
   els.rescanBtn.addEventListener('click', rescanCurrent);
   els.findDuplicatesBtn.addEventListener('click', findSuspectedDuplicateFiles);
   els.selectDuplicateExtrasBtn.addEventListener('click', selectDuplicateExtras);
@@ -1210,7 +1331,7 @@ function bindEvents() {
   els.exportBtn.addEventListener('click', exportSelection);
   els.deleteBtn.addEventListener('click', () => requestDeleteItems(selectedItems()));
 
-  for (const input of [els.typeFilter, els.minSizeFilter, els.sortSelect, els.duplicateModeSelect, els.selectedOnly, els.requireConfirm]) {
+  for (const input of [els.typeFilter, els.minSizeFilter, els.sortSelect, els.duplicateModeSelect, els.excludeExtInput, els.excludeNameRegexInput, els.pageSizeSelect, els.selectedOnly, els.requireConfirm]) {
     input.addEventListener('input', () => {
       saveControlPreferences();
       state.page = 1;
@@ -1255,7 +1376,7 @@ async function init() {
     els.pickDirBtn.disabled = true;
     els.restoreLastBtn.hidden = true;
   } else {
-    restoreRememberedDirectory();
+    showRememberedDirectoryShortcut();
   }
   updateStats();
   applyFilters();

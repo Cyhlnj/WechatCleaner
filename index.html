@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>微信资源清理器</title>
-  <link rel="stylesheet" href="styles.css?v=20260626-4" />
+  <link rel="stylesheet" href="styles.css?v=20260701-7" />
 </head>
 <body>
   <header class="app-header">
@@ -63,6 +63,18 @@
             <option value="hash">精确 Hash</option>
           </select>
         </label>
+        <label class="control-field exclude-field">
+          <span class="control-label">排除类型</span>
+          <input id="excludeExtInput" type="text" placeholder="如 db,tmp,log" />
+        </label>
+        <div class="control-field exclude-name-field">
+          <span class="control-label">排除文件名</span>
+          <div class="exclude-name-row">
+            <input id="excludeNameRegexInput" type="text" placeholder="如 ^\\d+(_M)?$" />
+            <button id="excludeNumberNameBtn" type="button" title="排除纯数字或数字加 _M 的文件名">数字/_M</button>
+          </div>
+          <span id="excludeNameHint" class="field-hint"></span>
+        </div>
         <label class="control-field toggle-field">
           <span class="control-label">显示</span>
           <span class="toggle-box">
@@ -130,6 +142,15 @@
         <button id="prevPageBtn" disabled>上一页</button>
         <span id="pageInfo">第 0 / 0 页</span>
         <button id="nextPageBtn" disabled>下一页</button>
+        <label class="pager-size-field">
+          <span>每页</span>
+          <select id="pageSizeSelect">
+            <option value="100">100</option>
+            <option value="200" selected>200</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+          </select>
+        </label>
       </div>
     </section>
 
@@ -157,6 +178,6 @@
     </menu>
   </dialog>
 
-  <script src="app.js?v=20260626-4"></script>
+  <script src="app.js?v=20260701-7"></script>
 </body>
 </html>

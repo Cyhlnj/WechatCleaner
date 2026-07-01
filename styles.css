@@ -164,7 +164,13 @@ main {
   padding: 14px;
 }
 
-.control-row,
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: start;
+}
+
 .action-row {
   display: flex;
   flex-wrap: wrap;
@@ -173,7 +179,7 @@ main {
 }
 
 .action-row {
-  margin-top: 12px;
+  margin-top: 24px;
 }
 
 label {
@@ -216,6 +222,60 @@ select {
   padding: 8px 10px;
   background: var(--control-bg);
   color: var(--text);
+}
+
+.exclude-field {
+  width: 150px;
+}
+
+.exclude-name-field {
+  width: 260px;
+  display: grid;
+  gap: 6px;
+  position: relative;
+}
+
+.exclude-field input,
+.exclude-name-field input {
+  width: 100%;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.exclude-name-row {
+  display: flex;
+  gap: 6px;
+}
+
+.exclude-name-row input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+#excludeNumberNameBtn {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field-hint {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-height: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.field-hint.error {
+  color: var(--danger);
 }
 
 .control-field select {
@@ -327,6 +387,25 @@ select {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+
+.pager-size-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pager-size-field select {
+  width: 86px;
+  height: 36px;
+  min-width: 0;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 8px;
 }
 
 .progress-right {
